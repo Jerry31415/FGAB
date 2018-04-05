@@ -52,3 +52,15 @@ void GenMax3TrainFile(int size, std::string filename = "train_sqr.txt"){
 	}
 	f.close();
 }
+
+void GenMin3TrainFile(int size, std::string filename = "train_sqr.txt"){
+	std::ofstream f(filename.c_str());
+	int a, b, c;
+	for (int i = 0; i < size; ++i){
+		a = rand() % 1024;
+		b = rand() % 1024;
+		c = rand() % 1024;
+		f << "<in>" << a << " " << b << " " << c << "</in><out>" << std::max(a, std::min(b, c)) << "</out>\n";
+	}
+	f.close();
+}

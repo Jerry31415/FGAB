@@ -42,23 +42,11 @@ void FortEmulator::dump() {
 }
 
 
-int FortEmulator::StApp(BYTE b) {		// приращение стека командной b
-	if (b >= NWords) return -1;//vError("StApp(%d)", b);
-	return stApp[b];
-}
-int FortEmulator::StDepth(BYTE b) {	// требуемая глубина стека командны b
-	if (b >= NWords) return -1; //vError("StDepth(%d)", b);
-	return stDepth[b];
-}
 std::string FortEmulator::WName(BYTE b) {	// имя командны b
 	if (b >= NWords) vError("StDepth(%d)", b);
 	return names[b];
 }
-int FortEmulator::Tag(BYTE b, int t) {// tag[b]
-	if (b >= NWords) vError("StDepth(%d)", b);
-	if (t >= 0) tag[b] = t;
-	return tag[b];
-}
+
 //-----------------------------------------------------------------------------
 BYTE FortEmulator::FIndex(char *word)// индекс слова с именем word, 255 если такого слова нет
 {
@@ -74,59 +62,29 @@ bool FortEmulator::isSecond(BYTE *pr, int i)	// pr[i] - второй байт двухбайтовой
 	if (i == 0) return false;
 	return pr[i - 1] <= 3;		// двухбайтовые команды имеют номера 1,2,3
 }
-//-----------------------------------------------------------------------------
-int FortEmulator::signature(BYTE *pr, char *sgn)// sgn[i] = приращение стека ПОСЛЕ i-й команды. Возвращает максимальную глубину стека
-{
-	char delta = 0;		// приращение стека ПОСЛЕ i-й команды
-	char depth = 0;		// требуемая глубина стека для выполнения i-й команды
-	while (*pr) {
-		BYTE cmd = *pr;
-		char dep1 = delta - StDepth(cmd);
-		if (dep1<depth) depth = dep1;		// обновим глубину
-		delta += StApp(cmd);
-		*sgn = delta;						// запомним приращение 
-		if (cmd > 3) {						// команды 1,2,3 - двухбайтовые, остальные однобайтовые.
-			sgn++;
-			pr++;
-		}
-		else {
-			sgn[1] = delta;
-			sgn += 2;
-			pr += 2;
-		}
-	}
-	return -depth;
-}
 
 //-----------------------------------------------------------------------------
-BYTE FortEmulator::addWord(char *name, BYTE *pr, int stApp_, int stDepth_, int tag_)	// добавить в словарь слово pr
+BYTE FortEmulator::addWord(char *name, BYTE *pr)	// добавить в словарь слово pr
 {
 	if (NWords == maxWords) vError("addWord: iWords=maxWords = %d", IWords);
 	int L = (int)strlen((char*)pr);
 	memcpy(FW[NWords], pr, L);
 	words[NWords] = [](){return 0; };			// соответствующая встроенная команда, её просто нет!
-	stApp[NWords] = stApp_;
-	stDepth[NWords] = stDepth_;
 	char *s = new char[strlen(name) + 1];
 	strcpy(s, name);
 	names[NWords] = s;
-	tag[NWords] = tag_;
 	NWords++;
 	return NWords - 1;
 }
 //-----------------------------------------------------------------------------
-BYTE FortEmulator::addWord(const char *name, const char *str, int tag_)	// добавить в словарь слово из текстовой строки str
+BYTE FortEmulator::addWord(const char *name, const char *str)	// добавить в словарь слово из текстовой строки str
 {
 	if (NWords == maxWords) vError("addWord: iWords=maxWords = %d", IWords);
 	int L = string2pr(str, FW[NWords]);
 	char sgn[maxWLen];
-	int d = signature(FW[NWords], sgn);
-	stApp[NWords] = sgn[L - 1];
-	stDepth[NWords] = d;
 	char *s = new char[strlen(name) + 1];
 	strcpy(s, name);
 	names[NWords] = s;
-	tag[NWords] = tag_;
 	NWords++;
 	return NWords - 1;
 }
@@ -217,7 +175,7 @@ int FortEmulator::c_exec(BYTE *pr)	// Выполнить программу. Возвращает код ошибки
 				if (stack[SP] != 0) {
 //					char dist = *pr;
 //					pr += dist;
-					pr = pr0 + *(pr + 1);
+					pr = pr0 + *(pr);
 					//pr = pr0 + (*pr);
 				}
 				else pr++;
@@ -261,10 +219,10 @@ void FortEmulator::mem_set(const std::vector<int>& a) 	// заполнить стек
 
 bool FortEmulator::check_result(const std::vector<int>& a){
 	//if (stack.size() != a.size()) return false;
-
 	if (SP != a.size() - 1) return false;
-	for (int i = 0; i < a.size(); i++)
+	for (int i = 0; i < a.size(); i++){
 		if (stack[i] != a[i]) return false;
+	}
 	return true;
 }
 //-----------------------------------------------------------------------------
@@ -525,26 +483,27 @@ void FortEmulator::Init(){
 	// сами встроенные функции, приращение стека, требуемая глубина стека стека
 	//             0       1       2       3      4       5       6      7      8        9       10       11       12       13       14     15     16     17    18      19     20     21         22     23    24     25    26    27    28     29     30    31    32
 	words = { { c_NULL, c_NULL, c_NULL, c_NULL, c_DUP, c_DROP, c_SWAP, c_OVER, c_ROT, c_MROT, c_2PICK, c_3PICK, c_4PICK, c_3ROLL, c_4ROLL, c_NEG, c_ADD, c_SUB, c_MUL, c_DIV, c_MOD, c_DIV_MOD, c_AND, c_OR, c_XOR, c_GH, c_LH, c_EQ, c_0EQ, c_0GT, c_0LT, c_PP, c_MM, c_NULL } };
-	stApp = { { 0, 0, -1, 1, 1, -1, 0, 1, 0, 0, 1, 1, 1, 0, 0, 0, -1, -1, -1, -1, -1, 0, -1, -1, -1, -1, -1, -1, 0, 0, 0, 0, 0, -777 } };
-	stDepth = { { 0, 0, 1, 0, 1, 1, 2, 2, 3, 3, 3, 4, 5, 4, 5, 1, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 1, 1, 1, 1, 1, -777 } };
-	tag = { { 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 0 } };
 	names = { { "NULL", "GOTO", "IF", "CONST", "DUP", "DROP", "SWAP", "OVER", "ROT", "-ROT", "2PICK", "3PICK", "4PICK", "3ROLL", "4ROLL", "NEG", "+", "-", "*", "/", "%", "/%", "AND", "OR", "XOR", ">", "<", "=", "=0", ">0", "<0", "++", "--", "NULL" } };
 }
 
 void FortEmulator::SetUsingCommand(std::vector<std::string>& c){
 	std::vector<std::function<int()>> new_words;
-	std::array<int, maxWords> new_stApp, new_stDepth, new_tag;
 	std::array<std::string, maxWords> new_names;
 	int indx = 0;
 	for (auto& e : c){
 		std::transform(e.begin(), e.end(), e.begin(), ::toupper);
 		for (int i = 0; i < names.size(); ++i){
 			if (e == names[i]){
+				bool f = false;
+				for (int z = 0; z < indx; ++z){
+					if (new_names[z] == e) {
+						f = true;
+						break;
+					}
+				}
+				if (f) continue;
 				new_names[indx] = names[i];
 				new_words.push_back(words[i]);
-				new_stApp[indx] = stApp[i];
-				new_stDepth[indx] = stDepth[i];
-				new_tag[indx] = tag[i];
 				++indx;
 			}
 		}
@@ -552,31 +511,39 @@ void FortEmulator::SetUsingCommand(std::vector<std::string>& c){
 	if (!new_words.empty()){
 		std::swap(new_words, words);
 		std::swap(new_names, names);
-		std::swap(new_stDepth, stDepth);
-		std::swap(new_stApp, stApp);
-		std::swap(new_tag, tag);
 		IWords = NWords = words.size();
 	}
 	else
 		throw std::runtime_error("Error: available instruction list is empty!");
+
+/*	pIC.clear();
+	for (int i = 0; i < words.size(); ++i){
+		pIC[names[i]] = i;
+	}*/
 }
 
 
-/*
-OVER SUB DUP >0  * +
-7 17 4 29 18 16 0
-
-6 7 21 18 16 0
-
-OVER OVER > IF 2 SWAP DROP
-7 7 25 2 6 5
-
-176 446 985
-
-7*(30^4+30^5)+25*30^3+2*30^2+30*6+5
-30^5=24300000
-30^4=810000
-30^3=27000
-30^2=900
-
-*/
+bool FortEmulator::checkCode(BYTECODE& bc){
+	int pnt;
+	for (int p = 0; p < bc.size(); ++p){
+		if (names[bc[p]] == "CONST") {
+			return false;
+		}
+//"NULL", "GOTO", "IF", "CONST", "DUP", "DROP", "SWAP", "OVER", "ROT", "-ROT", "2PICK", "3PICK", "4PICK", "3ROLL", "4ROLL", "NEG", "+", "-", "*", "/", "%", "/%", "AND", "OR", "XOR", ">", "<", "=", "=0", ">0", "<0", "++", "--", "NULL" 
+		if (names[bc[p]] == "NULL") return false;
+		if (names[bc[p]] == "GOTO" || names[bc[p]] == "IF"){
+			if (p == bc.size() - 1) return false;
+			pnt = bc[p + 1];
+			if (pnt == p) return false;
+			if (pnt >= bc.size()) return false;
+			if (pnt > 0){
+				std::string t = names[bc[pnt - 1]];
+				if (t == "NULL" || t == "GOTO" || t == "IF" || t == "CONST")
+					return false;
+//				if (bc[pnt - 1] < 4) return false;
+			}
+			++p;
+		}
+	}
+	return true;
+}

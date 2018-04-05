@@ -1,6 +1,7 @@
 #include "utility.h"
 #include <algorithm>
 #include <Windows.h>
+#include "FortEmulator.h"
 
 int NumCPU(){
 	SYSTEM_INFO sysinfo;
@@ -78,4 +79,102 @@ void ReadTrainData(const std::string& filename, std::vector<TrainElem<int>>& tr)
 		tr.push_back(elem);
 	}
 	f.close();
+}
+
+void WriteProtocol(int index, const BYTECODE& bc, const std::vector<TrainSubset<int>>& tr_subset, const std::vector<bool>& corr, const std::vector<TrainElem<int>>& tr, int Rating, FortEmulator& FE){
+	std::ofstream proto("proto" + toString(index + 1) + ".html");
+	proto << "<html>\n<head>\n<style = type=\"text/css\">\n";
+	proto << "TABLE{ border: 1px solid green; border-collapse: collapse; }\n";
+	proto << "TD,TH{ border: 1px solid green; }\n";
+	proto << "</style>\n</head>\n<body align=\"center\">\n";
+
+	proto << "<b>Available instructions:</b><p>\n";
+	proto << "<table align=\"center\">\n";
+	proto << "<tr>";
+	for (int t = 0; t < FE.NWords; ++t) proto << "<td>" << t << "</td>";
+	proto << "</tr>\n<tr>";
+	for (int t = 0; t < FE.NWords; ++t) proto << "<td>" << FE.names[t] << "</td>";
+	proto << "</tr>\n</table>\n";
+
+	proto << "\n<p>";
+	proto << "<p><b>ByteCode:</b><p>";
+	for (auto& e : bc) proto << (int)e << " ";
+	proto << "<p><b>Train subset (" << (index + 1) << "/" << tr.size() << "):</b>\n<p>\n";
+	proto << "<table align=\"center\">\n";
+	proto << "<tr><td>#</td><td>IN</td><td>OUT</td></tr>\n";
+	for (int i = 0; i < tr_subset[index].ss.size(); ++i){
+		proto << "<tr><td>" << i + 1 << "</td><td>";
+		for (auto& e : tr_subset[index].ss[i].in) proto << e << " ";
+		proto << "</td><td>";
+		for (auto& e : tr_subset[index].ss[i].out) proto << e << " ";
+		proto << "</td></tr>\n";
+	}
+	proto << "</table>\n";
+	proto << "<p><b>Correct results (" << Rating << "/" << tr.size() << "):</b>\n";
+	proto << "<table align=\"center\">\n";
+	proto << "<tr><td>#</td><td>IN</td><td>OUT</td><td>corr</td></tr>\n";
+	for (int z = 0; z < corr.size(); ++z){
+		proto << "<tr>";
+		proto << "<td>" << z << "</td>";
+		proto << "<td>";
+		for (auto& e : tr[z].in) proto << e << " ";
+		proto << "</td>";
+		proto << "<td>";
+		for (auto& e : tr[z].out) proto << e << " ";
+		proto << "</td>";
+		proto << "<td>" << ((corr[z]) ? "+" : "-") << "</td>";
+		proto << "</tr>\n";
+	}
+	proto << "</table>";
+	proto << "</body>\n</html>\n";
+	proto.close();
+}
+
+int CalcRating(std::vector<TrainElem<int>> tr, BYTECODE& p){
+	FortEmulator FE;
+	int res = 0;
+	for (int i = 0; i < tr.size(); ++i){
+		FE.mem_clear();
+		FE.mem_set(tr[i].in);
+		if (FE.emulator(p) == 0){
+			if (FE.check_result(tr[i].out)){
+				res++;
+			}
+		}
+	}
+	return res;
+}
+
+int CalcRating(std::vector<TrainElem<int>> tr, BYTECODE& p, std::vector<bool>& R){
+	FortEmulator FE;
+	int res = 0;
+	for (int i = 0; i < tr.size(); ++i){
+		FE.mem_clear();
+		FE.mem_set(tr[i].in);
+		if (FE.emulator(p) == 0){
+			if (FE.check_result(tr[i].out)){
+				R.push_back(1);
+				res++;
+			}
+			else {
+				R.push_back(0);
+			}
+		}
+	}
+	return res;
+}
+
+
+int testing_code(FortEmulator& FE, const TrainSubset<int>& tss, std::vector<BYTE>& bc){
+	int res = 0;
+	for (auto& elem : tss.ss){
+		FE.mem_set(elem.in);
+		FE.CClear();
+		if (FE.emulator(bc) == 0){
+			if (FE.check_result(elem.out)){
+				res++;
+			}
+		}
+	}
+	return res;
 }

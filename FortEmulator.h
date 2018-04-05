@@ -6,6 +6,7 @@
 #include <map>
 
 typedef unsigned char BYTE;
+typedef std::vector<BYTE> BYTECODE;
 
 // максимально возможное количество слов в системе
 #define maxWords 250
@@ -28,17 +29,13 @@ public:
 	void dump();			// вывести стек на экран
 
 	// ¬строенные команды, возвращают код ошибки-----------------------------------
-	int StApp(BYTE b);		// приращение стека командной b
-	int StDepth(BYTE b);	// требуема€ глубина стека командны b
 	std::string WName(BYTE b);	// им€ командны b
-	int Tag(BYTE b, int t = -1);// tag[b]
 	BYTE FIndex(char *word);// индекс слова с именем word, 255 если такого слова нет
 
 	bool isSecond(BYTE *pr, int i);		// pr[i] - второй байт двухбайтовой команды?
-	int  signature(BYTE *pr, char *sgn);// sgn[i] = приращение стека ѕќ—Ћ≈ i-й команды. ¬озвращает максимальную глубину стека
 	//-----------------------------------------------------------------------------
-	BYTE addWord(char *name, BYTE *pr, int stApp_, int stDepth_, int tag_);	// добавить в словарь слово pr
-	BYTE addWord(const char *name, const char *str, int tag_);	// добавить в словарь слово из текстовой строки str
+	BYTE addWord(char *name, BYTE *pr);	// добавить в словарь слово pr
+	BYTE addWord(const char *name, const char *str);	// добавить в словарь слово из текстовой строки str
 
 	std::string pr2string(BYTE *pr);				// ‘орт-программу в текст
 	int string2pr(const std::string& str, BYTE *pr);		// из строки str получить программу pr, возваращает длину
@@ -60,6 +57,8 @@ public:
 		
 	void SetUsingCommand(std::vector<std::string>&);
 
+	bool checkCode(BYTECODE& bc);
+
 	int IWords;		// количество встроенных слов
 	int NWords;	// текущее количество слов
 	BYTE FW[maxWords][maxWLen];	// сами форт-слова
@@ -67,6 +66,8 @@ public:
 	int MFcount, MF_max; // счЄтчики команд
 	std::vector<int> stack; // стек данных
 	std::vector<std::function<int()>> words;
-	std::array<int, maxWords> stApp, stDepth, tag;
 	std::array<std::string, maxWords> names;
+
+	std::map<std::string, int> pIC;
+
 };
