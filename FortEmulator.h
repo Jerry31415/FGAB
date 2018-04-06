@@ -67,7 +67,4 @@ public:
 	std::vector<int> stack; // стек данных
 	std::vector<std::function<int()>> words;
 	std::array<std::string, maxWords> names;
-
-	std::map<std::string, int> pIC;
-
 };

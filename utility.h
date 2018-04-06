@@ -3,6 +3,7 @@
 #include <vector>
 #include <string>
 #include <sstream>
+#include <array>
 
 typedef unsigned char BYTE;
 typedef std::vector<BYTE> BYTECODE;
@@ -12,6 +13,15 @@ std::string toString(const T& val){
 	std::stringstream ss;
 	ss << val;
 	return ss.str();
+}
+
+template<size_t SIZE>
+bool isExist(const BYTECODE& bc, const std::array<BYTE, SIZE>& code){
+	for (int i = 0; i < bc.size(); ++i){
+		for (int j = 0; j < code.size(); ++j)
+			if (bc[i] == code[j]) return true;
+	}
+	return false;
 }
 
 template<typename T>
@@ -88,4 +98,6 @@ int CalcRating(std::vector<TrainElem<int>> tr, BYTECODE& p);
 
 template<typename T>
 int testing_code(T& FE, const TrainSubset<int>& tss, std::vector<BYTE>& bc);
+
+void Selection(std::vector<BYTECODE>& bc, std::vector<TrainElem<int>>& tr);
 

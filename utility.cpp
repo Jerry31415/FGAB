@@ -17,7 +17,6 @@ int getUseCoresNum(int max_cpu_usage){
 void toSS(const unsigned __int64& v, const int& n, std::vector<BYTE>& res){
 	register unsigned __int64 div, r, val(v);
 	res.clear();
-	//std::vector<int> tmp;
 	if (val < n) {
 		res.push_back(val);
 		return;
@@ -153,11 +152,11 @@ int CalcRating(std::vector<TrainElem<int>> tr, BYTECODE& p, std::vector<bool>& R
 		FE.mem_set(tr[i].in);
 		if (FE.emulator(p) == 0){
 			if (FE.check_result(tr[i].out)){
-				R.push_back(1);
+				R.push_back(true);
 				res++;
 			}
 			else {
-				R.push_back(0);
+				R.push_back(false);
 			}
 		}
 	}
@@ -178,3 +177,20 @@ int testing_code(FortEmulator& FE, const TrainSubset<int>& tss, std::vector<BYTE
 	}
 	return res;
 }
+
+void Selection(std::vector<BYTECODE>& bc, std::vector<TrainElem<int>>& tr){
+	std::vector<int> R;
+	int max_R = -1;
+	for (auto& e : bc) R.push_back(CalcRating(tr, e));
+	for (auto& e : R) {
+		if (e > max_R) max_R = e;
+	}
+	std::vector<BYTECODE> new_bc;
+	for (int i = 0; i < bc.size(); ++i){
+		if (R[i] < max_R) continue;
+		new_bc.push_back(bc[i]);
+	}
+	bc.clear();
+	for (auto& e : new_bc) bc.push_back(e);
+}
+
