@@ -1,6 +1,10 @@
-#include "utility.h"
+#pragma warning(disable : 4018)
+#pragma warning(disable : 4244)
+
+
 #include <algorithm>
 #include <Windows.h>
+#include "utility.h"
 #include "FortEmulator.h"
 
 int NumCPU(){
@@ -14,21 +18,32 @@ int getUseCoresNum(int max_cpu_usage){
 	return (cores_number < 1) ? 1 : cores_number;
 }
 
-void toSS(const unsigned __int64& v, const int& n, std::vector<BYTE>& res){
-	register unsigned __int64 div, r, val(v);
+// res должен заканчиваться нулём
+void toSS(const unsigned __int64& v, const int& n, std::vector<BYTE>& res, std::vector<BYTE>& adm){
+	//register unsigned __int64 div, r, val(v);
+	//if (val < n) {
+	//	res.push_back(val);
+	//	res.push_back(0);
+	//	return;
+	//}
+
+	__int64 val = v;
 	res.clear();
-	if (val < n) {
-		res.push_back(val);
-		return;
-	}
+	bool tb = false;				// признак того, что предыдущая команда двухбайтовая
 	do{
-		div = val / n;
-		r = div*n;
-		res.push_back(val - r);
-		val = div;
-	} while (val >= n);
-	res.push_back(val);
-	std::reverse(res.begin(), res.end());
+		BYTE a = val%n;				// номер слова в списке adm
+		if (tb) {					// предыдущая команда двухбайтовая
+			res.push_back(a);
+			tb = false;
+		}
+		else {
+			BYTE b = adm[a];			// номер Форт-слова
+			tb = b < 4 ? true : false;
+			res.push_back(b);
+		}
+		val /= n;
+	} while (val > 0);
+	res.push_back(0);
 }
 
 std::string getValueByTag(const std::string& str, const std::string& tag){
@@ -37,17 +52,33 @@ std::string getValueByTag(const std::string& str, const std::string& tag){
 	if (pos_a != std::string::npos && pos_b != std::string::npos){
 		return str.substr(pos_a + tag.size() + 2, pos_b - (pos_a + tag.size() + 2));
 	}
+	return "";
 }
 
 void split(const std::string& str, const std::string& split_symbol, std::vector<std::string>& v){
-	int p = 0;
-	for (int i = 1; i < str.size(); ++i){
-		if (str.substr(i, 1) == split_symbol.c_str()){
-			v.push_back(str.substr(p, i - p));
-			p = i + 1;
+	//int p = 0;
+	//for (int i = 1; i < str.size(); ++i){
+	//	if (str.substr(i, 1) == split_symbol.c_str()){
+	//		if( i != p)
+	//			v.push_back(str.substr(p, i - p));
+	//		p = i + 1;
+	//	}
+	//}
+	//if( str.substr(p).length() >0)
+	//v.push_back(str.substr(p));
+	v.clear();
+	std::string token;
+
+	for_each(str.begin(), str.end(), [&](char c) {
+		if (!isspace(c))
+			token += c;
+		else
+		{
+			if (token.length()) v.push_back(token);
+			token.clear();
 		}
-	}
-	v.push_back(str.substr(p));
+	});
+	if (token.length()) v.push_back(token);
 }
 
 void ReadTrainData(const std::string& filename, std::vector<TrainElem<int>>& tr){
@@ -68,20 +99,20 @@ void ReadTrainData(const std::string& filename, std::vector<TrainElem<int>>& tr)
 		elem.clear();
 		s.push_back(str);
 		in_tmp = getValueByTag(str, "in");
-		tmp.clear();
 		split(in_tmp, " ", tmp);
 		for (auto& e : tmp) elem.in.push_back(std::stoi(e));
 		out_tmp = getValueByTag(str, "out");
-		tmp.clear();
 		split(out_tmp, " ", tmp);
 		for (auto& e : tmp) elem.out.push_back(std::stoi(e));
+		if (elem.in.empty() && elem.out.empty()) continue;
 		tr.push_back(elem);
 	}
 	f.close();
 }
 
-void WriteProtocol(int index, const BYTECODE& bc, const std::vector<TrainSubset<int>>& tr_subset, const std::vector<bool>& corr, const std::vector<TrainElem<int>>& tr, int Rating, FortEmulator& FE){
-	std::ofstream proto("proto" + toString(index + 1) + ".html");
+void WriteProtocol(int index, const BYTECODE& bc, const std::vector<TrainSubset<int>>& tr_subset, const std::vector<bool>& corr, 
+	const std::vector<TrainElem<int>>& tr, int Rating, FortEmulator& FE){
+	std::ofstream proto("proto" + std::to_string(index + 1) + ".html");
 	proto << "<html>\n<head>\n<style = type=\"text/css\">\n";
 	proto << "TABLE{ border: 1px solid green; border-collapse: collapse; }\n";
 	proto << "TD,TH{ border: 1px solid green; }\n";
@@ -129,55 +160,7 @@ void WriteProtocol(int index, const BYTECODE& bc, const std::vector<TrainSubset<
 	proto.close();
 }
 
-int CalcRating(std::vector<TrainElem<int>> tr, BYTECODE& p){
-	FortEmulator FE;
-	int res = 0;
-	for (int i = 0; i < tr.size(); ++i){
-		FE.mem_clear();
-		FE.mem_set(tr[i].in);
-		if (FE.emulator(p) == 0){
-			if (FE.check_result(tr[i].out)){
-				res++;
-			}
-		}
-	}
-	return res;
-}
-
-int CalcRating(std::vector<TrainElem<int>> tr, BYTECODE& p, std::vector<bool>& R){
-	FortEmulator FE;
-	int res = 0;
-	for (int i = 0; i < tr.size(); ++i){
-		FE.mem_clear();
-		FE.mem_set(tr[i].in);
-		if (FE.emulator(p) == 0){
-			if (FE.check_result(tr[i].out)){
-				R.push_back(true);
-				res++;
-			}
-			else {
-				R.push_back(false);
-			}
-		}
-	}
-	return res;
-}
-
-
-int testing_code(FortEmulator& FE, const TrainSubset<int>& tss, std::vector<BYTE>& bc){
-	int res = 0;
-	for (auto& elem : tss.ss){
-		FE.mem_set(elem.in);
-		FE.CClear();
-		if (FE.emulator(bc) == 0){
-			if (FE.check_result(elem.out)){
-				res++;
-			}
-		}
-	}
-	return res;
-}
-
+/*
 void Selection(std::vector<BYTECODE>& bc, std::vector<TrainElem<int>>& tr){
 	std::vector<int> R;
 	int max_R = -1;
@@ -193,4 +176,4 @@ void Selection(std::vector<BYTECODE>& bc, std::vector<TrainElem<int>>& tr){
 	bc.clear();
 	for (auto& e : new_bc) bc.push_back(e);
 }
-
+*/

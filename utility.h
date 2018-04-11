@@ -8,13 +8,6 @@
 typedef unsigned char BYTE;
 typedef std::vector<BYTE> BYTECODE;
 
-template<typename T>
-std::string toString(const T& val){
-	std::stringstream ss;
-	ss << val;
-	return ss.str();
-}
-
 template<size_t SIZE>
 bool isExist(const BYTECODE& bc, const std::array<BYTE, SIZE>& code){
 	for (int i = 0; i < bc.size(); ++i){
@@ -28,7 +21,6 @@ template<typename T>
 struct TrainElem{
 	std::vector<T> in;
 	std::vector<T> out;
-
 	void show(std::ostream& os = std::cout, bool p=true) const{
 		os << "IN: ";
 		for (auto& e : in) os << e << " ";
@@ -85,7 +77,7 @@ void BuildTrainSubset(const std::vector<TrainElem<T>>& src, std::vector<TrainSub
 int NumCPU();
 int getUseCoresNum(int max_cpu_usage = 50);
 
-void toSS(const unsigned __int64& v, const int& n, std::vector<BYTE>& res);
+void toSS(const unsigned __int64& v, const int& n, std::vector<BYTE>& res, std::vector<BYTE>& adm);// res:= преобразует число i в систему счисления по основанию N.
 std::string getValueByTag(const std::string& str, const std::string& tag);
 void split(const std::string& str, const std::string& split_symbol, std::vector<std::string>& v);
 void ReadTrainData(const std::string& filename, std::vector<TrainElem<int>>& tr);
@@ -93,11 +85,5 @@ void ReadTrainData(const std::string& filename, std::vector<TrainElem<int>>& tr)
 template<typename T>
 void WriteProtocol(int index, const BYTECODE& bc, const std::vector<TrainSubset<int>>& tr_subset, const std::vector<bool>& corr, const std::vector<TrainElem<int>>& tr, int Rating, T& FE);
 
-int CalcRating(std::vector<TrainElem<int>> tr, BYTECODE& p, std::vector<bool>& R);
-int CalcRating(std::vector<TrainElem<int>> tr, BYTECODE& p);
-
-template<typename T>
-int testing_code(T& FE, const TrainSubset<int>& tss, std::vector<BYTE>& bc);
-
-void Selection(std::vector<BYTECODE>& bc, std::vector<TrainElem<int>>& tr);
+//void Selection(std::vector<BYTECODE>& bc, std::vector<TrainElem<int>>& tr);
 

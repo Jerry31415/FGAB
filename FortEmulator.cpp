@@ -1,4 +1,6 @@
 // mfort.cpp 2018-02-27 минифорт
+#pragma warning(disable : 4018)
+#pragma warning(disable : 4244)
 
 #include "FortEmulator.h"
 #include <stdio.h>
@@ -10,20 +12,14 @@
 #include <iostream>
 #include <sstream>
 #include <algorithm>
+#include "utility.h"
 
 #pragma warning(disable : 4996)
 
 using namespace std;
 
-template<typename T>
-std::string toString(const T& val){
-	std::stringstream ss;
-	ss << val;
-	return ss.str();
-}
-
 //-----------------------------------------------------------------------------
-void FortEmulator::vError(const char *format, ...) // show error function
+void vError(const char *format, ...) // show error function
 {
 	va_list argp;
 	va_start(argp, format);
@@ -48,7 +44,7 @@ std::string FortEmulator::WName(BYTE b) {	// имя командны b
 }
 
 //-----------------------------------------------------------------------------
-BYTE FortEmulator::FIndex(char *word)// индекс слова с именем word, 255 если такого слова нет
+BYTE FortEmulator::FIndex(const char *word)// индекс слова с именем word, 255 если такого слова нет
 {
 	for (int i = 1; i < NWords; i++)
 		if (strcmp(word, names[i].c_str()) == 0) {
@@ -77,13 +73,29 @@ BYTE FortEmulator::addWord(char *name, BYTE *pr)	// добавить в словарь слово pr
 	return NWords - 1;
 }
 //-----------------------------------------------------------------------------
-BYTE FortEmulator::addWord(const char *name, const char *str)	// добавить в словарь слово из текстовой строки str
+BYTE FortEmulator::addWordT(const char *name, const char *str)	// добавить в словарь слово из текстовой строки str
 {
 	if (NWords == maxWords) vError("addWord: iWords=maxWords = %d", IWords);
+	char *name1 = (char *)name;
+	if (strlen(name) == 0) {		// если имя пустое, возьмём его из pr
+		if( str[0] != ':') vError("addWord: illegal word %s", str);
+		const char *nm = str+1;
+		while (*nm == ' ') nm++;	
+		// теперь nm указывает на первый не пробел после ':'
+		int len;
+		for (len = 1; len < 99; len++)
+			if (nm[len] == ' ')break;
+		// len - длина имени
+		name1 = new char[len + 1];
+		strncpy(name1, nm, len);
+		name1[len] = 0;
+		str = nm + len + 1;
+	}
+
 	int L = string2pr(str, FW[NWords]);
-	char sgn[maxWLen];
-	char *s = new char[strlen(name) + 1];
-	strcpy(s, name);
+	//char sgn[maxWLen];
+	char *s = new char[strlen(name1) + 1];
+	strcpy(s, name1);
 	names[NWords] = s;
 	NWords++;
 	return NWords - 1;
@@ -104,9 +116,26 @@ std::string FortEmulator::pr2string(BYTE *pr)	// Форт-программу в текст
 			int k = *pr;
 			if (k >= 128) k -= 256;
 			sprintf(buf, "%d", k);
-			s += (std::string(buf) + toString(strlen(buf)) + " ");
+			s += (std::string(buf) + std::to_string(strlen(buf)) + " ");
 		}
 		pr++;
+	}
+	s += ";";
+	return s;
+}
+std::string FortEmulator::pr2string(BYTECODE &pr)	// Форт-программу в текст
+{
+	BYTE b;
+	std::string s("");
+	for (int i = 0; i < pr.size(); i++) {
+		b = pr[i];
+		if (b == 0) break;
+		s += names[b] + " ";
+		if (b <= 3) {
+			int k = pr[i+1];
+			s += std::to_string(k) + " ";
+			i++;
+		}
 	}
 	s += ";";
 	return s;
@@ -171,7 +200,7 @@ int FortEmulator::c_exec(BYTE *pr)	// Выполнить программу. Возвращает код ошибки
 			continue;
 		}
 		if (b == 2) {// 2: Условный переход (вершина стека ?0) по заданному адресу. Команда состоит из 2-х байт:
-			if (SP < stack.size() && SP >= 0){
+			if (SP < (int)stack.size() && SP >= 0){
 				if (stack[SP] != 0) {
 //					char dist = *pr;
 //					pr += dist;
@@ -184,6 +213,7 @@ int FortEmulator::c_exec(BYTE *pr)	// Выполнить программу. Возвращает код ошибки
 			}
 		}
 		if (b == 3) {// 3: Кладем в стек числовой литерал (-128..127). Команда состоит из 2-х байт:
+			if (SP >= (int)stack.size() - 1) return -1;		// стек исчерпан
 			stack[++SP] = *pr++;
 			continue;
 		}
@@ -212,7 +242,7 @@ int FortEmulator::emulator(std::vector<BYTE>& bytecode){
 
 void FortEmulator::mem_set(const std::vector<int>& a) 	// заполнить стек
 {
-	for (int i = 0; i < a.size(); i++)
+	for (int i = 0; i < (int)a.size(); i++)
 		stack[i] = a[i];
 	SP = a.size() - 1;
 }
@@ -254,7 +284,7 @@ void FortEmulator::Init(){
 	};
 
 	auto c_DUP = [&]() {
-		if (SP < 0 || SP >= stack.size()){
+		if (SP < 0 || SP >= stack.size()-1){
 			return 4; // error("c_DUP: stack");
 		}
 		stack[SP + 1] = stack[SP];
@@ -277,7 +307,7 @@ void FortEmulator::Init(){
 	};
 
 	auto c_OVER= [&]() {
-		if (SP <1 || SP >= stack.size()) return 7; // error("c_OVER: stack");
+		if (SP <1 || SP >= stack.size()-1) return 7; // error("c_OVER: stack");
 		stack[SP + 1] = stack[SP - 1];
 		SP++;
 		return 0;
@@ -304,14 +334,17 @@ void FortEmulator::Init(){
 	auto c_PICK = [&]() {
 		if (SP <1) return 10; // error("c_PICK: stack");
 		int n = stack[SP];
-		if (SP < n - 1) return 10; // error("c_PICK: stack");
+		if (n <2) return 10; // error("c_PICK: stack");
+		if (SP <= n) return 10; // error("c_PICK: stack");
+		if (SP - n >stack.size()) return 10; // error("c_PICK: stack");
 		stack[SP] = stack[SP - n - 1];
 		return 0;
 	};
 
 	auto c_ROLL = [&]() {
+		if (SP <2) return 10; // error("c_PICK: stack");
 		int n = stack[SP];
-		if (n < 1) return 11; // error("c_ROLL: stack");
+		if (n < 2) return 11; // error("c_ROLL: stack");
 		--SP;
 		if (SP < n) return 11; // error("c_ROLL: stack");
 		int t = stack[SP - n];
@@ -321,21 +354,21 @@ void FortEmulator::Init(){
 	};
 
 	auto c_2PICK = [&]() {
-		if (SP < 2 || SP >= stack.size()) return 10;
+		if (SP < 2 || SP >= stack.size()-1) return 10;
 		stack[SP + 1] = stack[SP - 2];
 		SP++;
 		return 0;
 	};
 
 	auto c_3PICK = [&]() {
-		if (SP < 3 || SP >= stack.size()) return 10;
+		if (SP < 3 || SP >= stack.size()-1) return 10;
 		stack[SP + 1] = stack[SP - 3];
 		SP++;
 		return 0;
 	};
 
 	auto c_4PICK = [&]() {
-		if (SP < 4 || SP >= stack.size()) return 10;
+		if (SP < 4 || SP >= stack.size()-1) return 10;
 		stack[SP + 1] = stack[SP - 4];
 		SP++;
 		return 0;
@@ -481,9 +514,10 @@ void FortEmulator::Init(){
 		return 0;
 	};
 	// сами встроенные функции, приращение стека, требуемая глубина стека стека
-	//             0       1       2       3      4       5       6      7      8        9       10       11       12       13       14     15     16     17    18      19     20     21         22     23    24     25    26    27    28     29     30    31    32
-	words = { { c_NULL, c_NULL, c_NULL, c_NULL, c_DUP, c_DROP, c_SWAP, c_OVER, c_ROT, c_MROT, c_2PICK, c_3PICK, c_4PICK, c_3ROLL, c_4ROLL, c_NEG, c_ADD, c_SUB, c_MUL, c_DIV, c_MOD, c_DIV_MOD, c_AND, c_OR, c_XOR, c_GH, c_LH, c_EQ, c_0EQ, c_0GT, c_0LT, c_PP, c_MM, c_NULL } };
-	names = { { "NULL", "GOTO", "IF", "CONST", "DUP", "DROP", "SWAP", "OVER", "ROT", "-ROT", "2PICK", "3PICK", "4PICK", "3ROLL", "4ROLL", "NEG", "+", "-", "*", "/", "%", "/%", "AND", "OR", "XOR", ">", "<", "=", "=0", ">0", "<0", "++", "--", "NULL" } };
+	//             0       1       2       3      4       5       6      7      8        9       10       11       12       13       14    15      16      17      18      19     20     21     22     23         24     25    26    27    28     29     30    31    32     33     34
+	words = { { c_NULL, c_NULL, c_NULL, c_NULL, c_DUP, c_DROP, c_SWAP, c_OVER, c_ROT, c_MROT, c_PICK, c_2PICK, c_3PICK, c_4PICK, c_ROLL, c_3ROLL, c_4ROLL, c_NEG, c_ADD, c_SUB, c_MUL, c_DIV, c_MOD, c_DIV_MOD, c_AND, c_OR, c_XOR, c_GH, c_LH, c_EQ, c_0EQ, c_0GT, c_0LT, c_PP, c_MM, c_NULL } };
+	names = { { "NULL", "GOTO", "IF",  "CONST", "DUP", "DROP",  "SWAP", "OVER", "ROT", "-ROT", "PICK", "2PICK", "3PICK", "4PICK", "ROLL" ,"3ROLL", "4ROLL", "NEG", "+",  "-",   "*",   "/",   "%",   "/%",      "AND",  "OR", "XOR", ">", "<",   "=",  "=0", ">0",  "<0",  "++",  "--", "NULL" } };
+	adm_all();			// установить полный допустимых список
 }
 
 void FortEmulator::SetUsingCommand(std::vector<std::string>& c){
@@ -522,28 +556,126 @@ void FortEmulator::SetUsingCommand(std::vector<std::string>& c){
 	}*/
 }
 
-
+// Если bc.size()==5, то
+// bc[4] обязательно равно 0,
+// bc[3] - последняя команда, sz = 3!
 bool FortEmulator::checkCode(BYTECODE& bc){
-	int pnt;
-	for (int p = 0; p < bc.size(); ++p){
-		if (names[bc[p]] == "CONST") {
-			return false;
-		}
-//"NULL", "GOTO", "IF", "CONST", "DUP", "DROP", "SWAP", "OVER", "ROT", "-ROT", "2PICK", "3PICK", "4PICK", "3ROLL", "4ROLL", "NEG", "+", "-", "*", "/", "%", "/%", "AND", "OR", "XOR", ">", "<", "=", "=0", ">0", "<0", "++", "--", "NULL" 
-		if (names[bc[p]] == "NULL") return false;
-		if (names[bc[p]] == "GOTO" || names[bc[p]] == "IF"){
-			if (p == bc.size() - 1) return false;
-			pnt = bc[p + 1];
-			if (pnt == p) return false;
-			if (pnt >= bc.size()) return false;
-			if (pnt > 0){
-				std::string t = names[bc[pnt - 1]];
-				if (t == "NULL" || t == "GOTO" || t == "IF" || t == "CONST")
-					return false;
-//				if (bc[pnt - 1] < 4) return false;
-			}
+	unsigned sz = bc.size() - 2;					// индекс последней команды
+	if (bc[sz+1] != 0) return false;				// последний байт должен быть 0!
+	for (unsigned p = 0; p <= sz; ++p){
+		BYTE bcp = bc[p];							// код команды
+		if (bcp == 0) return false;					// нулей внутри функции быть не должно
+		if (bcp == 3) {								// "CONST", константа при переборе
 			++p;
+			continue;
+		}					
+		if (bcp < 4) {								// так как это не 0 и не 3, то 1 или 2, то есть GOTO или IF
+			if (p == sz) return false;				// последняя команда не может быть переходом
+			BYTE b1 = bc[p + 1];					// куда переходим
+			if (b1 == p) return false;				// нельзя переходить на самого себя
+			if (b1 > sz+1) return false;			// нельзя переходить за пределы функции. На последний 0 переходить можно.
+			if (b1 > 0 && bc[b1 - 1] < 4) return false;// нельзя переходить на второй байт двухбайтовой команды
+			p++;									// пропускаем второй байт двухбайтовой команды
+		}
+		if (p>0){
+			// Запрещаем пары операций не влияющих на результат работы программы
+			if (names[bcp] == "++" && names[bc[p - 1]] == "--") return false; // ++ --
+			if (names[bcp] == "--" && names[bc[p - 1]] == "++") return false; // -- ++
+			if (names[bcp] == "DROP" && names[bc[p - 1]] == "DUP") return false; // DUP DROP
+			if (bcp == bc[p - 1] && names[bcp] == "SWAP") return false; // SWAP SWAP
+			if (names[bcp] == "ROT" && names[bc[p - 1]] == "-ROT") return false; // -ROT ROT
+			if (names[bcp] == "-ROT" && names[bc[p - 1]] == "ROT") return false; // ROT -ROT
+			if (bcp == bc[p - 1] && names[bcp] == "NEG") return false; // NEG NEG
 		}
 	}
 	return true;
+}
+
+template<>
+int FortEmulator::CalcRating(std::vector<TrainElem<int>> tr, BYTECODE& p){
+	int res = 0;
+	for (int i = 0; i < tr.size(); ++i){
+		mem_clear();
+		mem_set(tr[i].in);
+		if (emulator(p) == 0){
+			if (check_result(tr[i].out)){
+				res++;
+			}
+		}
+	}
+	return res;
+}
+
+template<>
+int FortEmulator::CalcRating(std::vector<TrainElem<int>> tr, BYTECODE& p, std::vector<bool>& R){
+	int res = 0;
+	for (int i = 0; i < tr.size(); ++i){
+		CClear();
+		mem_clear();
+		mem_set(tr[i].in);
+		if (emulator(p) == 0){
+			if (check_result(tr[i].out)){
+				R.push_back(true);
+				res++;
+			}
+			else {
+				R.push_back(false);
+			}
+		}
+	}
+	return res;
+}
+
+template<>
+int FortEmulator::testing_code(const TrainSubset<int>& tss, std::vector<BYTE>& bc){
+	int res = 0;
+	for (auto& elem : tss.ss){
+		mem_set(elem.in);
+		CClear();
+		if (emulator(bc) != 0) {	// ошибка выполнения. Другие тесты не будем проверять!
+			return 0;
+		}
+		if (check_result(elem.out))
+			res++;
+	}
+	return res;
+}
+
+
+//---- список допустимых слов ---------------------------------------------
+//BYTECODE adm;									// список допустимых слов
+void FortEmulator::adm_all()					// установить полный список
+{
+	adm.clear();
+	for (BYTE i = 1; i < NWords; i++)
+		adm.push_back(i);
+}
+void FortEmulator::adm_add(BYTE b)				// добавить одно слово
+{
+	adm.push_back(b);
+}
+void FortEmulator::adm_set(std::string &s)		// установить список слов из строки
+{
+	adm.clear();
+	std::vector<std::string> ww;				// список слов
+	split(s, " ", ww);							// ww := список слов
+	for (unsigned i = 0; i < ww.size(); i++) {
+		BYTE b = FIndex(ww[i].c_str());
+		if (b == 255) vError("FortEmulator::adm_set, Illegal word %s", ww[i].c_str());
+		//std::cout << i << " " << (0+b) << "\n";
+		adm.push_back(b);
+	}
+	std::cout << "admit: " << pr2string(adm) << "\n";
+
+}
+//-----------------------------------------------------------------------------
+void FortEmulator::adm_add(std::vector<std::string> ww)		// добавить новые слова из текста
+{
+	std::vector<std::string> v;
+	for (unsigned i = 0; i < ww.size(); i++) {
+		if (ww[i][0] != ':') vError("FortEmulator::adm_add, illegal definition <%s>", ww[i].c_str());
+		BYTE b = addWordT("", ww[i].c_str());
+		adm_add(b);
+	}
+
 }

@@ -86,7 +86,7 @@ void GenDetermTrainFile(int size, std::string filename = "train_determ.txt"){
 
 void GenSqrTrainFile(int size, std::string filename = "train_sqr.txt"){
 	std::ofstream f(filename.c_str());
-	int a, b, c;
+	int a, b; //, c;
 	for (int i = 0; i < size; ++i){
 		a = rand() % 128;
 		b = rand() % 128;
